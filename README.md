@@ -4,4 +4,4 @@
 
 ---
 
-![Fox eating contributions](./fox-composite.gif)
+![Fox walking](./fox-standalone.gif)
