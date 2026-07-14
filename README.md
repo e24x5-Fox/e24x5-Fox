@@ -4,4 +4,4 @@
 
 ---
 
-![Fox walking](./fox-standalone.gif)
+![Fox eating contributions](https://raw.githubusercontent.com/e24x5-Fox/e24x5-Fox/main/fox-snake.gif)
