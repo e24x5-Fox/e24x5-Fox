@@ -107,16 +107,23 @@ def build_animation(cells, out_path):
         return x, y
 
     # --- smart eating order: nearest-neighbor walk within each level group ---
+    # level 0 (no contributions) is treated as static background and is
+    # never "eaten" — the fox only ever travels between real contribution days
     order = []
     by_level = {}
     for i, c in enumerate(cells):
+        if c["level"] == 0:
+            continue
         by_level.setdefault(c["level"], []).append(i)
 
-    current_xy = cell_xy(cells[0])
+    if not by_level:
+        raise RuntimeError("No non-zero contribution days found — nothing to animate.")
+
+    first_idx = by_level[sorted(by_level.keys())[0]][0]
+    current_xy = cell_xy(cells[first_idx])
     for level in sorted(by_level.keys()):
         remaining = by_level[level][:]
         while remaining:
-            # pick nearest unvisited cell in this level group to current position
             best_j, best_dist = 0, None
             for j, idx in enumerate(remaining):
                 x, y = cell_xy(cells[idx])
@@ -156,8 +163,9 @@ def build_animation(cells, out_path):
                 x = margin + c["col"] * (CELL + GAP)
                 y = margin + c["row"] * (CELL + GAP)
                 color = EATEN_COLOR if i in eaten else LEVEL_COLORS.get(c["level"], "#ebedf0")
-                draw.rounded_rectangle(
-                    [x, y, x + CELL, y + CELL], radius=2, fill=hex2rgb(color)
+                # plain rectangle (no anti-aliasing) keeps the palette small and exact
+                draw.rectangle(
+                    [x, y, x + CELL, y + CELL], fill=hex2rgb(color)
                 )
 
             frame_set = fox_frames_l if facing_left else fox_frames_r
@@ -167,8 +175,8 @@ def build_animation(cells, out_path):
             fox_y = int(fox_cy - fh / 2)
             canvas.paste(walk_frame, (fox_x, fox_y), walk_frame)
 
-            frames_out.append(canvas.convert("P", palette=Image.ADAPTIVE, colors=32))
-            durations.append(55)
+            frames_out.append(canvas.convert("P", palette=Image.ADAPTIVE, colors=256))
+            durations.append(90)
 
         prev_xy = target_xy
 
