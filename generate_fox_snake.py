@@ -90,32 +90,65 @@ def build_animation(cells, out_path):
     canvas_w = grid_w + margin * 2
     canvas_h = grid_h + margin * 2
 
-    fox_frames = [
+    fox_frames_r = [
         Image.open(f"{FRAME_DIR}/frame_{i}.png").convert("RGBA")
         for i in range(N_WALK_FRAMES)
     ]
-    fox_frames = [
+    fox_frames_r = [
         f.resize((f.width * FOX_SCALE, f.height * FOX_SCALE), Image.NEAREST)
-        for f in fox_frames
+        for f in fox_frames_r
     ]
-    fw, fh = fox_frames[0].size
+    fox_frames_l = [f.transpose(Image.FLIP_LEFT_RIGHT) for f in fox_frames_r]
+    fw, fh = fox_frames_r[0].size
 
-    # eating order: ascending contribution level, ties broken chronologically
-    order = sorted(range(len(cells)), key=lambda i: (cells[i]["level"], cells[i]["date"]))
+    def cell_xy(c):
+        x = margin + c["col"] * (CELL + GAP) + CELL / 2
+        y = margin + c["row"] * (CELL + GAP) + CELL / 2
+        return x, y
+
+    # --- smart eating order: nearest-neighbor walk within each level group ---
+    order = []
+    by_level = {}
+    for i, c in enumerate(cells):
+        by_level.setdefault(c["level"], []).append(i)
+
+    current_xy = cell_xy(cells[0])
+    for level in sorted(by_level.keys()):
+        remaining = by_level[level][:]
+        while remaining:
+            # pick nearest unvisited cell in this level group to current position
+            best_j, best_dist = 0, None
+            for j, idx in enumerate(remaining):
+                x, y = cell_xy(cells[idx])
+                d = (x - current_xy[0]) ** 2 + (y - current_xy[1]) ** 2
+                if best_dist is None or d < best_dist:
+                    best_dist, best_j = d, j
+            idx = remaining.pop(best_j)
+            order.append(idx)
+            current_xy = cell_xy(cells[idx])
 
     frames_out = []
     durations = []
     eaten = set()
 
-    STEP_FRAMES = 1  # how many animation frames per grid cell (higher = slower/smoother, but bigger file)
+    SUB_FRAMES = 2  # interpolated movement steps between two visited cells
+
+    prev_xy = cell_xy(cells[order[0]])
+    walk_counter = 0
 
     for step_i, cell_idx in enumerate(order):
-        eaten.add(cell_idx)
         cell = cells[cell_idx]
-        cx = margin + cell["col"] * (CELL + GAP)
-        cy = margin + cell["row"] * (CELL + GAP)
+        target_xy = cell_xy(cell)
+        facing_left = target_xy[0] < prev_xy[0]
 
-        for sub in range(STEP_FRAMES):
+        for sub in range(SUB_FRAMES):
+            t = (sub + 1) / SUB_FRAMES
+            fox_cx = prev_xy[0] + (target_xy[0] - prev_xy[0]) * t
+            fox_cy = prev_xy[1] + (target_xy[1] - prev_xy[1]) * t
+
+            if sub == SUB_FRAMES - 1:
+                eaten.add(cell_idx)
+
             canvas = Image.new("RGBA", (canvas_w, canvas_h), (255, 255, 255, 255))
             draw = ImageDraw.Draw(canvas)
 
@@ -127,13 +160,17 @@ def build_animation(cells, out_path):
                     [x, y, x + CELL, y + CELL], radius=2, fill=hex2rgb(color)
                 )
 
-            walk_frame = fox_frames[(step_i * STEP_FRAMES + sub) % N_WALK_FRAMES]
-            fox_x = cx + CELL // 2 - fw // 2
-            fox_y = cy + CELL // 2 - fh // 2
+            frame_set = fox_frames_l if facing_left else fox_frames_r
+            walk_frame = frame_set[walk_counter % N_WALK_FRAMES]
+            walk_counter += 1
+            fox_x = int(fox_cx - fw / 2)
+            fox_y = int(fox_cy - fh / 2)
             canvas.paste(walk_frame, (fox_x, fox_y), walk_frame)
 
             frames_out.append(canvas.convert("P", palette=Image.ADAPTIVE, colors=32))
-            durations.append(70)
+            durations.append(55)
+
+        prev_xy = target_xy
 
     # hold last frame briefly before looping
     for _ in range(6):
