@@ -145,6 +145,7 @@ def build_animation(cells, out_path):
     walk_counter = 0
     cell_eaten_time = {}
 
+    # 1. Фаза поедания ячеек
     for step_i, cell_idx in enumerate(order):
         cell = cells[cell_idx]
         target_xy = cell_xy(cell)
@@ -174,7 +175,54 @@ def build_animation(cells, out_path):
 
         prev_xy = target_xy
 
-    # Pause at the end: 6 frames of 200ms
+    # 2. Добавление обратного пути к первой ячейке для плавного зацикливания
+    start_cell = cells[order[0]]
+    last_cell = cells[order[-1]]
+
+    col_start, row_start = start_cell["col"], start_cell["row"]
+    col_last, row_last = last_cell["col"], last_cell["row"]
+
+    dx = col_start - col_last
+    dy = row_start - row_last
+    distance = max(abs(dx), abs(dy))
+
+    if distance > 0:
+        # Генерируем координаты шагов по прямой линии назад
+        path_back = []
+        for i in range(1, distance + 1):
+            t_ratio = i / distance
+            col = col_last + dx * t_ratio
+            row = row_last + dy * t_ratio
+            x = margin + col * (CELL + GAP) + CELL / 2
+            y = margin + row * (CELL + GAP) + CELL / 2
+            path_back.append((x, y))
+
+        # Перемещение лисы по построенному обратному пути
+        for target_xy in path_back:
+            facing_left = target_xy[0] < prev_xy[0]
+
+            for sub in range(SUB_FRAMES):
+                t = (sub + 1) / SUB_FRAMES
+                fox_cx = prev_xy[0] + (target_xy[0] - prev_xy[0]) * t
+                fox_cy = prev_xy[1] + (target_xy[1] - prev_xy[1]) * t
+
+                fox_x = int(fox_cx - fw / 2)
+                fox_y = int(fox_cy - fh / 2)
+
+                frame_idx = walk_counter % N_WALK_FRAMES
+                active_frame_id = (facing_left, frame_idx)
+                walk_counter += 1
+
+                timeline.append({
+                    "time": current_time,
+                    "translate": (fox_x, fox_y),
+                    "active_frame_id": active_frame_id
+                })
+                current_time += dt
+
+            prev_xy = target_xy
+
+    # 3. Пауза в самом конце (лиса сидит на стартовой ячейке): 6 кадров по 200мс
     for _ in range(6):
         timeline.append({
             "time": current_time,
