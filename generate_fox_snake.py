@@ -24,7 +24,7 @@ from PIL import Image
 
 CELL = 12          # px per grid cell (output scale)
 GAP = 2             # px gap between cells
-FOX_SCALE = 2        # scale factor applied to the 8 walk-cycle frames
+FOX_SCALE = 1        # scale factor applied to the 8 walk-cycle frames
 FRAME_DIR = "assets/fox_frames"
 N_WALK_FRAMES = 8
 
