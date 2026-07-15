@@ -4,4 +4,4 @@
 
 ---
 
-![Fox eating contributions](./fox-snake.gif)
+![Fox eating contributions](./fox-snake.svg)
