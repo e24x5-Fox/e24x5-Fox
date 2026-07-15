@@ -23,7 +23,14 @@ from PIL import Image, ImageDraw
 
 CELL = 12          # px per grid cell (output scale)
 GAP = 2             # px gap between cells
-FOX_SCALE = 3        # scale factor applied to the 8 walk-cycle frames
+
+# --- ИЗМЕНЕНИЕ ТУТ ---
+# Коэффициент масштабирования спрайта лисы. 
+# Был равен 3. Установка в 2 сделает лису меньше и аккуратнее. 
+# Если хотите сделать её совсем крошечной, можете поставить 1.
+FOX_SCALE = 2        
+# ---------------------
+
 FRAME_DIR = "assets/fox_frames"
 N_WALK_FRAMES = 8
 
@@ -50,12 +57,10 @@ def fetch_contributions(username: str):
     soup = BeautifulSoup(resp.text, "html.parser")
 
     cells = []
-    # current GitHub markup uses <td class="ContributionCalendar-day" data-date="..." data-level="...">
     for td in soup.select("td[data-date]"):
         date_str = td.get("data-date")
         level = td.get("data-level")
         if level is None:
-            # fallback: derive level from fill/class if data-level missing
             level = 0
         else:
             level = int(level)
@@ -67,7 +72,6 @@ def fetch_contributions(username: str):
             "Check the parsing selectors in fetch_contributions()."
         )
 
-    # assign grid coordinates: column = week index, row = weekday (Sun=0)
     cells.sort(key=lambda c: c["date"])
     first_date = datetime.strptime(cells[0]["date"], "%Y-%m-%d")
     start_weekday = (first_date.weekday() + 1) % 7  # convert Mon=0 -> Sun=0
@@ -106,9 +110,6 @@ def build_animation(cells, out_path):
         y = margin + c["row"] * (CELL + GAP) + CELL / 2
         return x, y
 
-    # --- smart eating order: nearest-neighbor walk within each level group ---
-    # level 0 (no contributions) is treated as static background and is
-    # never "eaten" — the fox only ever travels between real contribution days
     order = []
     by_level = {}
     for i, c in enumerate(cells):
@@ -138,7 +139,7 @@ def build_animation(cells, out_path):
     durations = []
     eaten = set()
 
-    SUB_FRAMES = 2  # interpolated movement steps between two visited cells
+    SUB_FRAMES = 2
 
     prev_xy = cell_xy(cells[order[0]])
     walk_counter = 0
@@ -163,7 +164,6 @@ def build_animation(cells, out_path):
                 x = margin + c["col"] * (CELL + GAP)
                 y = margin + c["row"] * (CELL + GAP)
                 color = EATEN_COLOR if i in eaten else LEVEL_COLORS.get(c["level"], "#ebedf0")
-                # plain rectangle (no anti-aliasing) keeps the palette small and exact
                 draw.rectangle(
                     [x, y, x + CELL, y + CELL], fill=hex2rgb(color)
                 )
@@ -180,7 +180,6 @@ def build_animation(cells, out_path):
 
         prev_xy = target_xy
 
-    # hold last frame briefly before looping
     for _ in range(6):
         frames_out.append(frames_out[-1])
         durations.append(200)
