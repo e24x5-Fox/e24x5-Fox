@@ -380,6 +380,7 @@
   <rect x="748" y="62" width="12" height="12" fill="#216e39">
     <animate attributeName="fill" calcMode="discrete" dur="3.18s" repeatCount="indefinite" values="#216e39;#d0d7de" keyTimes="0;0.2830" />
   </rect>
+  <rect x="748" y="76" width="12" height="12" fill="#ebedf0" />
   <g id="fox">
     <animateTransform attributeName="transform" type="translate" calcMode="discrete" dur="3.18s" repeatCount="indefinite" values="680,16;680,16;708,16;736,16;736,23;736,30;736,37;736,44;736,51;736,58;729,72;722,86;717,79;713,72;709,65;705,58;701,51;696,44;692,37;688,30;684,23;680,16;680,16;680,16;680,16;680,16;680,16;680,16" keyTimes="0.0000;0.0283;0.0566;0.0849;0.1132;0.1415;0.1698;0.1981;0.2264;0.2547;0.2830;0.3113;0.3396;0.3679;0.3962;0.4245;0.4528;0.4811;0.5094;0.5377;0.5660;0.5943;0.6226;0.6855;0.7484;0.8113;0.8742;0.9371" />
     <image x="0" y="0" width="36" height="20" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACQAAAAUCAYAAADlep81AAABGklEQVR4nM2WPQ6CQBBGH4aOksSEwgtozxk8hXoFKxtLGiuvoJ6CM9jrBSxMSCytsXHQEJj9kU18CQXL7s7Ht7O7A2Go30/fey9RCDHTyRiA660CoPWuxoxlklZ7CKFCrc0fA/XzcQfgst8AkBcndZCJw3KuftfmH/kGDcUIiJI0I0kz8uIEwHm7AMsktGF1LFkdS6u+kkNin68In3FdY6KudazfDjWOmZD+bWbrXWe75Kog7l1vVeOQU6CQqA750udMH0maNXr+aZdFgL5kJkxOfP25lRj4UZBrMBtUQba5ILtG+n/nhIsYCHtSe109qkO2OdDc5p9zy/setMkh0+SDVgqd55BL/dIS9XPZMtQuC1k/AQ4l59C8ADJeRqMAl6s1AAAAAElFTkSuQmCC" opacity="0">
