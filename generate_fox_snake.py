@@ -16,6 +16,7 @@ Requires: requests, beautifulsoup4, pillow
 import argparse
 import base64
 import io
+import time
 from datetime import datetime
 
 import requests
@@ -28,14 +29,30 @@ FOX_SCALE = 1        # scale factor applied to the 8 walk-cycle frames
 FRAME_DIR = "assets/fox_frames"
 N_WALK_FRAMES = 8
 
-LEVEL_COLORS = {
-    0: "#ebedf0",
-    1: "#9be9a8",
-    2: "#40c463",
-    3: "#30a14e",
-    4: "#216e39",
+PALETTES = {
+    "light": {
+        "level_colors": {
+            0: "#ebedf0",
+            1: "#9be9a8",
+            2: "#40c463",
+            3: "#30a14e",
+            4: "#216e39",
+        },
+        "eaten_color": "#d0d7de",
+        "bg_color": "#ffffff",
+    },
+    "dark": {
+        "level_colors": {
+            0: "#161b22",
+            1: "#0e4429",
+            2: "#006d32",
+            3: "#26a641",
+            4: "#39d353",
+        },
+        "eaten_color": "#30363d",
+        "bg_color": "#0d1117",
+    },
 }
-EATEN_COLOR = "#d0d7de"
 
 
 def img_to_base64(img):
@@ -45,11 +62,26 @@ def img_to_base64(img):
     return base64.b64encode(buffered.getvalue()).decode("utf-8")
 
 
-def fetch_contributions(username: str):
+def fetch_contributions(username: str, retries: int = 3, backoff: float = 2.0):
     """Scrape the public contribution calendar (same endpoint snk uses)."""
     url = f"https://github.com/users/{username}/contributions"
-    resp = requests.get(url, headers={"User-Agent": "fox-snake-generator"})
-    resp.raise_for_status()
+    last_error = None
+    for attempt in range(retries):
+        try:
+            resp = requests.get(
+                url, headers={"User-Agent": "fox-snake-generator"}, timeout=15
+            )
+            resp.raise_for_status()
+            break
+        except (requests.RequestException,) as exc:
+            last_error = exc
+            if attempt < retries - 1:
+                time.sleep(backoff * (2 ** attempt))
+    else:
+        raise RuntimeError(
+            f"Failed to fetch contributions for '{username}' after {retries} attempts"
+        ) from last_error
+
     soup = BeautifulSoup(resp.text, "html.parser")
 
     cells = []
@@ -79,7 +111,11 @@ def fetch_contributions(username: str):
     return cells
 
 
-def build_animation(cells, out_path):
+def build_animation(cells, out_path, palette="light"):
+    level_colors = PALETTES[palette]["level_colors"]
+    eaten_color = PALETTES[palette]["eaten_color"]
+    bg_color = PALETTES[palette]["bg_color"]
+
     max_col = max(c["col"] for c in cells)
     max_row = max(c["row"] for c in cells)
     grid_w = (max_col + 1) * (CELL + GAP)
@@ -243,14 +279,14 @@ def build_animation(cells, out_path):
     for i, c in enumerate(cells):
         x = margin + c["col"] * (CELL + GAP)
         y = margin + c["row"] * (CELL + GAP)
-        original_color = LEVEL_COLORS.get(c["level"], "#ebedf0")
+        original_color = level_colors.get(c["level"], level_colors[0])
 
         if i in cell_eaten_time:
             t_eaten = cell_eaten_time[i] / total_duration
             cells_svg_parts.append(
                 f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" fill="{original_color}">\n'
                 f'    <animate attributeName="fill" calcMode="discrete" dur="{total_duration:.2f}s" '
-                f'repeatCount="indefinite" values="{original_color};{EATEN_COLOR}" keyTimes="0;{t_eaten:.4f}" />\n'
+                f'repeatCount="indefinite" values="{original_color};{eaten_color}" keyTimes="0;{t_eaten:.4f}" />\n'
                 f'  </rect>'
             )
         else:
@@ -283,7 +319,7 @@ def build_animation(cells, out_path):
 
     # Assemble SVG
     svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{canvas_w}" height="{canvas_h}" viewBox="0 0 {canvas_w} {canvas_h}">
-  <rect width="{canvas_w}" height="{canvas_h}" fill="#ffffff" />
+  <rect width="{canvas_w}" height="{canvas_h}" fill="{bg_color}" />
 {cells_svg_str}
   <g id="fox">
     <animateTransform attributeName="transform" type="translate" calcMode="discrete" dur="{total_duration:.2f}s" repeatCount="indefinite" values="{values_translate}" keyTimes="{key_times_str}" />
@@ -301,10 +337,27 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--user", required=True)
     ap.add_argument("--out", default="fox-snake.svg")
+    ap.add_argument(
+        "--dark-out",
+        default=None,
+        help="Path for the dark-theme variant (default: <out>-dark.svg)",
+    )
+    ap.add_argument(
+        "--no-dark",
+        action="store_true",
+        help="Skip generating the dark-theme variant",
+    )
     args = ap.parse_args()
 
     cells = fetch_contributions(args.user)
-    build_animation(cells, args.out)
+    build_animation(cells, args.out, palette="light")
+
+    if not args.no_dark:
+        dark_out = args.dark_out
+        if dark_out is None:
+            base, ext = args.out.rsplit(".", 1)
+            dark_out = f"{base}-dark.{ext}"
+        build_animation(cells, dark_out, palette="dark")
 
 
 if __name__ == "__main__":
