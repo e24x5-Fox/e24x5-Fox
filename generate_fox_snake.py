@@ -42,6 +42,7 @@ PALETTES = {
         },
         "eaten_color": "#d0d7de",
         "bg_color": "#ffffff",
+        "text_color": "#656d76",
     },
     "dark": {
         "level_colors": {
@@ -53,8 +54,17 @@ PALETTES = {
         },
         "eaten_color": "#30363d",
         "bg_color": "#0d1117",
+        "text_color": "#9198a1",
     },
 }
+
+MONTH_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+DAY_LABELS = {1: "Mon", 3: "Wed", 5: "Fri"}  # row index (0=Sun) -> label
+LABEL_FONT = (
+    'font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,sans-serif" '
+    'font-size="9"'
+)
 
 
 def img_to_base64(img):
@@ -117,15 +127,24 @@ def build_animation(cells, out_path, palette="light"):
     level_colors = PALETTES[palette]["level_colors"]
     eaten_color = PALETTES[palette]["eaten_color"]
     bg_color = PALETTES[palette]["bg_color"]
+    text_color = PALETTES[palette]["text_color"]
 
     max_col = max(c["col"] for c in cells)
     max_row = max(c["row"] for c in cells)
     grid_w = (max_col + 1) * (CELL + GAP)
     grid_h = (max_row + 1) * (CELL + GAP)
 
-    margin = 20
-    canvas_w = grid_w + margin * 2
-    canvas_h = grid_h + margin * 2
+    outer_margin = 10
+    day_label_width = 24   # room for "Mon"/"Wed"/"Fri" to the left of the grid
+    month_label_height = 16  # room for month names above the grid
+    strip_gap = 8           # gap between grid and the eaten-order progress strip
+    strip_height = CELL
+
+    grid_x0 = outer_margin + day_label_width
+    grid_y0 = outer_margin + month_label_height
+
+    canvas_w = grid_x0 + grid_w + outer_margin
+    canvas_h = grid_y0 + grid_h + strip_gap + strip_height + outer_margin
 
     # Prepare fox frames and encode to base64
     fox_frames_r = [
@@ -143,8 +162,8 @@ def build_animation(cells, out_path, palette="light"):
     base64_l = [img_to_base64(f) for f in fox_frames_l]
 
     def cell_xy(c):
-        x = margin + c["col"] * (CELL + GAP) + CELL / 2
-        y = margin + c["row"] * (CELL + GAP) + CELL / 2
+        x = grid_x0 + c["col"] * (CELL + GAP) + CELL / 2
+        y = grid_y0 + c["row"] * (CELL + GAP) + CELL / 2
         return x, y
 
     # Smart eating order
@@ -242,8 +261,8 @@ def build_animation(cells, out_path, palette="light"):
             t_ratio = i / distance
             col = col_last + dx * t_ratio
             row = row_last + dy * t_ratio
-            x = margin + col * (CELL + GAP) + CELL / 2
-            y = margin + row * (CELL + GAP) + CELL / 2
+            x = grid_x0 + col * (CELL + GAP) + CELL / 2
+            y = grid_y0 + row * (CELL + GAP) + CELL / 2
             path_back.append((x, y))
 
         # Перемещение лисы по построенному обратному пути
@@ -271,8 +290,8 @@ def build_animation(cells, out_path, palette="light"):
     # Build animated background cells
     cells_svg_parts = []
     for i, c in enumerate(cells):
-        x = margin + c["col"] * (CELL + GAP)
-        y = margin + c["row"] * (CELL + GAP)
+        x = grid_x0 + c["col"] * (CELL + GAP)
+        y = grid_y0 + c["row"] * (CELL + GAP)
         original_color = level_colors.get(c["level"], level_colors[0])
 
         if i in cell_eaten_time:
@@ -288,6 +307,55 @@ def build_animation(cells, out_path, palette="light"):
                 f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="{CELL_RADIUS}" ry="{CELL_RADIUS}" fill="{original_color}" />'
             )
     cells_svg_str = "\n".join(cells_svg_parts)
+
+    # Month labels above the grid: one per column where the month changes
+    col_first_date = {}
+    for c in cells:
+        col_first_date.setdefault(c["col"], c["date"])
+
+    month_label_parts = []
+    last_month = None
+    last_label_col = None
+    for col in sorted(col_first_date):
+        month = int(col_first_date[col][5:7])
+        if month != last_month and (last_label_col is None or col - last_label_col >= 3):
+            x = grid_x0 + col * (CELL + GAP)
+            y = grid_y0 - 6
+            month_label_parts.append(
+                f'  <text x="{x}" y="{y}" fill="{text_color}" {LABEL_FONT}>{MONTH_ABBR[month - 1]}</text>'
+            )
+            last_label_col = col
+        last_month = month
+    month_labels_svg = "\n".join(month_label_parts)
+
+    # Day-of-week labels to the left of the grid
+    day_label_parts = []
+    for row, label in DAY_LABELS.items():
+        x = outer_margin
+        y = grid_y0 + row * (CELL + GAP) + CELL / 2 + 3
+        day_label_parts.append(
+            f'  <text x="{x}" y="{y}" fill="{text_color}" {LABEL_FONT}>{label}</text>'
+        )
+    day_labels_svg = "\n".join(day_label_parts)
+
+    # Progress strip: one segment per eaten cell, lighting up with that
+    # cell's activity color the moment the fox eats it — same idea as the
+    # original snake's fill-up bar.
+    strip_y = grid_y0 + grid_h + strip_gap
+    seg_w = grid_w / len(order)
+    strip_parts = []
+    for i, cell_idx in enumerate(order):
+        seg_x = grid_x0 + i * seg_w
+        seg_color = level_colors.get(cells[cell_idx]["level"], level_colors[0])
+        t_eaten = cell_eaten_time[cell_idx] / total_duration
+        strip_parts.append(
+            f'  <rect x="{seg_x:.2f}" y="{strip_y}" width="{seg_w + 0.5:.2f}" height="{strip_height}" '
+            f'rx="{CELL_RADIUS}" ry="{CELL_RADIUS}" fill="{eaten_color}">\n'
+            f'    <animate attributeName="fill" calcMode="discrete" dur="{total_duration:.2f}s" '
+            f'repeatCount="indefinite" values="{eaten_color};{seg_color}" keyTimes="0;{t_eaten:.4f}" />\n'
+            f'  </rect>'
+        )
+    strip_svg = "\n".join(strip_parts)
 
     # Build base64 image nodes for Fox
     images_str = []
@@ -314,7 +382,10 @@ def build_animation(cells, out_path, palette="light"):
     # Assemble SVG
     svg_content = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{canvas_w}" height="{canvas_h}" viewBox="0 0 {canvas_w} {canvas_h}">
   <rect width="{canvas_w}" height="{canvas_h}" fill="{bg_color}" />
+{month_labels_svg}
+{day_labels_svg}
 {cells_svg_str}
+{strip_svg}
   <g id="fox">
     <animateTransform attributeName="transform" type="translate" calcMode="discrete" dur="{total_duration:.2f}s" repeatCount="indefinite" values="{values_translate}" keyTimes="{key_times_str}" />
 {images_svg_str}
