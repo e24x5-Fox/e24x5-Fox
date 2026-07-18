@@ -2,6 +2,10 @@
 
 Создаю приложения и инструменты с помощью **Claude Code** и нейросетей.
 
+<p align="center">
+  <img src="https://skillicons.dev/icons?i=python,js,html,css" alt="Python, JavaScript, HTML, CSS" />
+</p>
+
 ---
 
 <picture>
