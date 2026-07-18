@@ -16,6 +16,7 @@ Requires: requests, beautifulsoup4, pillow
 import argparse
 import base64
 import io
+import math
 import time
 from datetime import datetime
 
@@ -177,19 +178,22 @@ def build_animation(cells, out_path, palette="light"):
     current_time = 0.0
     SUB_FRAMES = 2
     dt = 0.09  # 90ms per step
+    # px covered per substep, calibrated so a single grid-cell hop keeps the
+    # original pacing; used to give every hop the same on-screen speed
+    # regardless of how far apart the two cells are.
+    PX_PER_SUBSTEP = (CELL + GAP) / SUB_FRAMES
 
     prev_xy = cell_xy(cells[order[0]])
     walk_counter = 0
     cell_eaten_time = {}
 
-    # 1. Фаза поедания ячеек
-    for step_i, cell_idx in enumerate(order):
-        cell = cells[cell_idx]
-        target_xy = cell_xy(cell)
+    def walk_to(prev_xy, target_xy, walk_counter, current_time, on_arrive=None):
+        distance = math.hypot(target_xy[0] - prev_xy[0], target_xy[1] - prev_xy[1])
+        n_sub = max(1, round(distance / PX_PER_SUBSTEP))
         facing_left = target_xy[0] < prev_xy[0]
 
-        for sub in range(SUB_FRAMES):
-            t = (sub + 1) / SUB_FRAMES
+        for sub in range(n_sub):
+            t = (sub + 1) / n_sub
             fox_cx = prev_xy[0] + (target_xy[0] - prev_xy[0]) * t
             fox_cy = prev_xy[1] + (target_xy[1] - prev_xy[1]) * t
 
@@ -207,10 +211,18 @@ def build_animation(cells, out_path, palette="light"):
             })
             current_time += dt
 
-            if sub == SUB_FRAMES - 1:
-                cell_eaten_time[cell_idx] = current_time
+            if sub == n_sub - 1 and on_arrive:
+                on_arrive(current_time)
 
-        prev_xy = target_xy
+        return target_xy, walk_counter, current_time
+
+    # 1. Фаза поедания ячеек
+    for cell_idx in order:
+        target_xy = cell_xy(cells[cell_idx])
+        prev_xy, walk_counter, current_time = walk_to(
+            prev_xy, target_xy, walk_counter, current_time,
+            on_arrive=lambda t, idx=cell_idx: cell_eaten_time.__setitem__(idx, t),
+        )
 
     # 2. Добавление обратного пути к первой ячейке для плавного зацикливания
     start_cell = cells[order[0]]
@@ -236,28 +248,9 @@ def build_animation(cells, out_path, palette="light"):
 
         # Перемещение лисы по построенному обратному пути
         for target_xy in path_back:
-            facing_left = target_xy[0] < prev_xy[0]
-
-            for sub in range(SUB_FRAMES):
-                t = (sub + 1) / SUB_FRAMES
-                fox_cx = prev_xy[0] + (target_xy[0] - prev_xy[0]) * t
-                fox_cy = prev_xy[1] + (target_xy[1] - prev_xy[1]) * t
-
-                fox_x = int(fox_cx - fw / 2)
-                fox_y = int(fox_cy - fh / 2)
-
-                frame_idx = walk_counter % N_WALK_FRAMES
-                active_frame_id = (facing_left, frame_idx)
-                walk_counter += 1
-
-                timeline.append({
-                    "time": current_time,
-                    "translate": (fox_x, fox_y),
-                    "active_frame_id": active_frame_id
-                })
-                current_time += dt
-
-            prev_xy = target_xy
+            prev_xy, walk_counter, current_time = walk_to(
+                prev_xy, target_xy, walk_counter, current_time
+            )
 
     # 3. Пауза в самом конце (лиса сидит на стартовой ячейке): 6 кадров по 200мс
     for _ in range(6):
