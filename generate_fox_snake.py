@@ -25,6 +25,7 @@ from PIL import Image
 
 CELL = 12          # px per grid cell (output scale)
 GAP = 2             # px gap between cells
+CELL_RADIUS = 2      # corner radius, matches GitHub's own contribution graph
 FOX_SCALE = 1        # scale factor applied to the 8 walk-cycle frames
 FRAME_DIR = "assets/fox_frames"
 N_WALK_FRAMES = 8
@@ -284,14 +285,14 @@ def build_animation(cells, out_path, palette="light"):
         if i in cell_eaten_time:
             t_eaten = cell_eaten_time[i] / total_duration
             cells_svg_parts.append(
-                f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" fill="{original_color}">\n'
+                f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="{CELL_RADIUS}" ry="{CELL_RADIUS}" fill="{original_color}">\n'
                 f'    <animate attributeName="fill" calcMode="discrete" dur="{total_duration:.2f}s" '
                 f'repeatCount="indefinite" values="{original_color};{eaten_color}" keyTimes="0;{t_eaten:.4f}" />\n'
                 f'  </rect>'
             )
         else:
             cells_svg_parts.append(
-                f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" fill="{original_color}" />'
+                f'  <rect x="{x}" y="{y}" width="{CELL}" height="{CELL}" rx="{CELL_RADIUS}" ry="{CELL_RADIUS}" fill="{original_color}" />'
             )
     cells_svg_str = "\n".join(cells_svg_parts)
 
