@@ -18,6 +18,7 @@ import base64
 import io
 import math
 import time
+from collections import deque
 from datetime import datetime
 
 import requests
@@ -166,6 +167,41 @@ def build_animation(cells, out_path, palette="light"):
         y = grid_y0 + c["row"] * (CELL + GAP) + CELL / 2
         return x, y
 
+    # Grid-walk pathfinding: the fox may only move to an orthogonally
+    # adjacent day, and only onto a not-yet-eaten activity cell if that is
+    # the cell it is currently heading for — everything else with activity
+    # is a wall until it's its turn, same as the original snake routing
+    # around days it isn't eating yet.
+    cell_by_rc = {(c["row"], c["col"]): i for i, c in enumerate(cells)}
+    blocked_rc = {(c["row"], c["col"]) for c in cells if c["level"] > 0}
+
+    def find_path(start_rc, target_rc):
+        if start_rc == target_rc:
+            return [start_rc]
+        visited = {start_rc}
+        parent = {}
+        queue = deque([start_rc])
+        while queue:
+            cur = queue.popleft()
+            if cur == target_rc:
+                break
+            r, c = cur
+            for nxt in ((r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)):
+                if nxt in visited or nxt not in cell_by_rc:
+                    continue
+                if nxt != target_rc and nxt in blocked_rc:
+                    continue
+                visited.add(nxt)
+                parent[nxt] = cur
+                queue.append(nxt)
+        if target_rc not in parent and target_rc != start_rc:
+            return None
+        path = [target_rc]
+        while path[-1] != start_rc:
+            path.append(parent[path[-1]])
+        path.reverse()
+        return path
+
     # Smart eating order
     order = []
     by_level = {}
@@ -177,8 +213,9 @@ def build_animation(cells, out_path, palette="light"):
     if not by_level:
         raise RuntimeError("No non-zero contribution days found.")
 
-    first_idx = by_level[sorted(by_level.keys())[0]][0]
-    current_xy = cell_xy(cells[first_idx])
+    # Nearest-neighbour selection starts from the grid's top-left cell (the
+    # earliest date), same starting point the fox itself walks from.
+    current_xy = cell_xy(cells[0])
     for level in sorted(by_level.keys()):
         remaining = by_level[level][:]
         while remaining:
@@ -202,7 +239,7 @@ def build_animation(cells, out_path, palette="light"):
     # regardless of how far apart the two cells are.
     PX_PER_SUBSTEP = (CELL + GAP) / SUB_FRAMES
 
-    prev_xy = cell_xy(cells[order[0]])
+    prev_xy = cell_xy(cells[0])
     walk_counter = 0
     cell_eaten_time = {}
 
@@ -235,38 +272,43 @@ def build_animation(cells, out_path, palette="light"):
 
         return target_xy, walk_counter, current_time
 
-    # 1. Фаза поедания ячеек
+    # 1. Фаза поедания ячеек — лиса стартует из самой первой (верхней
+    # левой) клетки года и идёт по сетке шаг за шагом, обходя ещё не
+    # съеденные клетки активности, наступая на клетку только тогда,
+    # когда пришла её очередь быть съеденной.
+    current_rc = (cells[0]["row"], cells[0]["col"])
     for cell_idx in order:
-        target_xy = cell_xy(cells[cell_idx])
-        prev_xy, walk_counter, current_time = walk_to(
-            prev_xy, target_xy, walk_counter, current_time,
-            on_arrive=lambda t, idx=cell_idx: cell_eaten_time.__setitem__(idx, t),
-        )
+        target_rc = (cells[cell_idx]["row"], cells[cell_idx]["col"])
+        path = find_path(current_rc, target_rc)
+        if path is None:
+            # Полностью окружена ещё не съеденными клетками (редкий
+            # случай) — идём напрямую, а не застреваем.
+            path = [current_rc, target_rc]
 
-    # 2. Добавление обратного пути к первой ячейке для плавного зацикливания
-    start_cell = cells[order[0]]
-    last_cell = cells[order[-1]]
+        waypoints = path[1:] or [target_rc]
+        for i, rc in enumerate(waypoints):
+            target_xy = cell_xy(cells[cell_by_rc[rc]])
+            is_last = i == len(waypoints) - 1
+            prev_xy, walk_counter, current_time = walk_to(
+                prev_xy, target_xy, walk_counter, current_time,
+                on_arrive=(
+                    (lambda t, idx=cell_idx: cell_eaten_time.__setitem__(idx, t))
+                    if is_last else None
+                ),
+            )
 
-    col_start, row_start = start_cell["col"], start_cell["row"]
-    col_last, row_last = last_cell["col"], last_cell["row"]
+        blocked_rc.discard(target_rc)
+        current_rc = target_rc
 
-    dx = col_start - col_last
-    dy = row_start - row_last
-    distance = max(abs(dx), abs(dy))
-
-    if distance > 0:
-        # Генерируем координаты шагов по прямой линии назад
-        path_back = []
-        for i in range(1, distance + 1):
-            t_ratio = i / distance
-            col = col_last + dx * t_ratio
-            row = row_last + dy * t_ratio
-            x = grid_x0 + col * (CELL + GAP) + CELL / 2
-            y = grid_y0 + row * (CELL + GAP) + CELL / 2
-            path_back.append((x, y))
-
-        # Перемещение лисы по построенному обратному пути
-        for target_xy in path_back:
+    # 2. Возврат к стартовой клетке для плавного зацикливания — тем же
+    # поиском пути по сетке (только вверх/вниз/влево/вправо, без
+    # диагоналей); к этому моменту все клетки активности уже съедены,
+    # так что путь ничем не заблокирован.
+    start_rc = (cells[0]["row"], cells[0]["col"])
+    if current_rc != start_rc:
+        path_back = find_path(current_rc, start_rc) or [current_rc, start_rc]
+        for rc in path_back[1:]:
+            target_xy = cell_xy(cells[cell_by_rc[rc]])
             prev_xy, walk_counter, current_time = walk_to(
                 prev_xy, target_xy, walk_counter, current_time
             )
