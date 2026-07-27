@@ -414,6 +414,7 @@
   <rect x="762" y="26" width="12" height="12" rx="2" ry="2" fill="#033a16">
     <animate attributeName="fill" calcMode="discrete" dur="24.78s" repeatCount="indefinite" values="#033a16;#30363d" keyTimes="0;0.3777" />
   </rect>
+  <rect x="762" y="40" width="12" height="12" rx="2" ry="2" fill="#151b23" />
   <rect x="34.00" y="132" width="44.15" height="12" rx="2" ry="2" fill="#30363d">
     <animate attributeName="fill" calcMode="discrete" dur="24.78s" repeatCount="indefinite" values="#30363d;#033a16" keyTimes="0;0.3341" />
   </rect>
