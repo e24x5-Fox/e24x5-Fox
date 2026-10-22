@@ -591,6 +591,7 @@
   <rect x="762" y="68" width="12" height="12" rx="2" ry="2" fill="#033a16">
     <animate attributeName="fill" calcMode="discrete" dur="46.74s" repeatCount="indefinite" values="#033a16;#30363d" keyTimes="0;0.4891" />
   </rect>
+  <rect x="762" y="82" width="12" height="12" rx="2" ry="2" fill="#151b23" />
   <rect x="34.00" y="132" width="7.63" height="12" rx="2" ry="2" fill="#30363d">
     <animate attributeName="fill" calcMode="discrete" dur="46.74s" repeatCount="indefinite" values="#30363d;#033a16" keyTimes="0;0.1309" />
   </rect>
